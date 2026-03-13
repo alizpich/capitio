@@ -14,7 +14,8 @@ const LABEL_LICENCE = { valide: 'Validée', en_attente: 'En attente', expiree: '
 const LABEL_COTIS   = { reglee: 'Réglée', en_attente: 'En attente', en_retard: 'En retard' }
 
 const EMPTY_FORM = {
-  prenom: '', nom: '', email: '', telephone: '', equipe: 'Senior',
+  prenom: '', nom: '', email: '', telephone: '', equipe: '',
+  role_club: 'joueur',
   is_coach: false, licence_statut: 'en_attente', cotisation_statut: 'en_attente',
   certificat_date: '',
 }
@@ -46,10 +47,11 @@ export default function Membres() {
   }
 
   const filtres = [
-    { key: 'tous',   label: `Tous (${membres.length})` },
-    { key: 'coach',  label: `🎽 Coachs (${membres.filter(m => m.is_coach).length})`, style: 'coach' },
-    { key: 'alerte', label: `⚠️ Alertes (${membres.filter(m => m.certificat_date && new Date(m.certificat_date) < new Date(Date.now() + 14*864e5) || m.cotisation_statut === 'en_retard').length})` },
-    ...EQUIPES.map(e => ({ key: e.toLowerCase(), label: e })),
+    { key: 'tous',     label: `Tous (${membres.length})` },
+    { key: 'joueur',   label: `⚽ Joueurs (${membres.filter(m => m.role_club === 'joueur' || m.role_club === 'les_deux').length})` },
+    { key: 'benevole', label: `🙋 Bénévoles (${membres.filter(m => m.role_club === 'benevole' || m.role_club === 'les_deux').length})` },
+    { key: 'coach',    label: `🎽 Coachs (${membres.filter(m => m.is_coach).length})` },
+    { key: 'alerte',   label: `⚠️ Alertes (${membres.filter(m => (m.certificat_date && new Date(m.certificat_date) < new Date(Date.now() + 14*864e5)) || m.cotisation_statut === 'en_retard').length})` },
   ]
 
   const visible = membres.filter(m => {
@@ -57,6 +59,8 @@ export default function Membres() {
       `${m.prenom} ${m.nom} ${m.email}`.toLowerCase().includes(search.toLowerCase())
     if (!matchSearch) return false
     if (filtre === 'tous') return true
+    if (filtre === 'joueur') return m.role_club === 'joueur' || m.role_club === 'les_deux'
+    if (filtre === 'benevole') return m.role_club === 'benevole' || m.role_club === 'les_deux'
     if (filtre === 'coach') return m.is_coach
     if (filtre === 'alerte') return (
       (m.certificat_date && new Date(m.certificat_date) < new Date(Date.now() + 14*864e5)) ||
@@ -69,13 +73,15 @@ export default function Membres() {
 
   function openNew() { setForm(EMPTY_FORM); setEditId(null); setModal(true) }
   function openEdit(m) {
-    setForm({ ...m, certificat_date: m.certificat_date || '' })
+    setForm({ ...m, certificat_date: m.certificat_date || '', equipe: m.equipe || '' })
     setEditId(m.id); setModal(true)
   }
 
   async function save() {
+    if (!form.prenom || !form.nom) { toastError('Prénom et nom sont obligatoires'); return }
     setSaving(true)
     const payload = { ...form }
+    if (!payload.equipe) delete payload.equipe
     delete payload.id; delete payload.club_id; delete payload.created_at; delete payload.actif
 
     let err
@@ -102,6 +108,10 @@ export default function Membres() {
   const avColor = m => avColors[(m.prenom?.charCodeAt(0) ?? 0) % avColors.length]
 
   const coachsPanel = membres.filter(m => m.is_coach)
+  const isJoueur = form.role_club === 'joueur' || form.role_club === 'les_deux'
+
+  const roleLabel = r => ({ joueur: '⚽ Joueur', benevole: '🙋 Bénévole', les_deux: '⚽🙋 Joueur & Bénévole' })[r] || r
+  const roleBadge = r => ({ joueur: 'blue', benevole: 'green', les_deux: 'purple' })[r] || 'gray'
 
   return (
     <PageShell
@@ -136,12 +146,8 @@ export default function Membres() {
                   <div style={{ fontSize: '0.71rem', color: '#9BA8B5' }}>{m.equipe} {m.equipement_coach ? `· ${m.equipement_coach}` : ''}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 5 }}>
-                  {m.telephone && (
-                    <a href={`tel:${m.telephone}`} style={{ width: 27, height: 27, borderRadius: 7, border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.78rem', textDecoration: 'none' }}>📞</a>
-                  )}
-                  {m.email && (
-                    <a href={`mailto:${m.email}`} style={{ width: 27, height: 27, borderRadius: 7, border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.78rem', textDecoration: 'none' }}>📧</a>
-                  )}
+                  {m.telephone && <a href={`tel:${m.telephone}`} style={{ width: 27, height: 27, borderRadius: 7, border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.78rem', textDecoration: 'none' }}>📞</a>}
+                  {m.email && <a href={`mailto:${m.email}`} style={{ width: 27, height: 27, borderRadius: 7, border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.78rem', textDecoration: 'none' }}>📧</a>}
                 </div>
               </div>
             ))}
@@ -150,26 +156,17 @@ export default function Membres() {
       )}
 
       <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 14, alignItems: 'center' }}>
-        <div style={{ flex: 1, minWidth: 200, display: 'flex', alignItems: 'center', gap: 8, background: '#F5F7FA', border: '1.5px solid #E2E8F0', borderRadius: 9, padding: '8px 14px', fontSize: '0.82rem', color: '#9BA8B5' }}>
+        <div style={{ flex: 1, minWidth: 200, display: 'flex', alignItems: 'center', gap: 8, background: '#F5F7FA', border: '1.5px solid #E2E8F0', borderRadius: 9, padding: '8px 14px' }}>
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="🔍 Rechercher…" style={{ background: 'none', border: 'none', outline: 'none', fontSize: '0.82rem', color: '#0B1A3E', width: '100%', fontFamily: 'inherit' }} />
         </div>
-        {['tous','coach','alerte'].map(f => {
-          const fp = filtres.find(x => x.key === f)
-          const isOn = filtre === f
-          const isCoach = f === 'coach'
-          const isAlert = f === 'alerte'
+        {filtres.map(f => {
+          const isOn = filtre === f.key
           return (
-            <div key={f} onClick={() => setFiltre(f)}
-              style={{
-                padding: '6px 14px', borderRadius: 99, fontSize: '0.78rem', fontWeight: 500,
-                border: '1.5px solid',
-                borderColor: isOn ? (isCoach ? '#7B5EA7' : isAlert ? '#FF6B2B' : '#0B1A3E') : '#E2E8F0',
-                background: isOn ? (isCoach ? '#7B5EA7' : isAlert ? '#FF6B2B' : '#0B1A3E') : '#fff',
-                color: isOn ? '#fff' : (isCoach ? '#7B5EA7' : isAlert ? '#FF6B2B' : '#6B7A8D'),
-                cursor: 'pointer', transition: 'all 0.15s',
-              }}>
-              {fp?.label}
+            <div key={f.key} onClick={() => setFiltre(f.key)}
+              style={{ padding: '6px 14px', borderRadius: 99, fontSize: '0.78rem', fontWeight: 500, border: '1.5px solid', cursor: 'pointer', transition: 'all 0.15s',
+                borderColor: isOn ? '#0B1A3E' : '#E2E8F0', background: isOn ? '#0B1A3E' : '#fff', color: isOn ? '#fff' : '#6B7A8D' }}>
+              {f.label}
             </div>
           )
         })}
@@ -179,10 +176,8 @@ export default function Membres() {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#F5F7FA', borderBottom: '1px solid #E2E8F0' }}>
-              {['Membre','Équipe','Contact','Licence','Certificat','Cotisation',''].map((h,i) => (
-                <th key={i} style={{ padding: '11px 14px', fontSize: '0.7rem', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: '#9BA8B5', textAlign: i === 6 ? 'right' : 'left' }}>
-                  {h}
-                </th>
+              {['Membre','Rôle','Équipe','Contact','Licence','Cotisation',''].map((h,i) => (
+                <th key={i} style={{ padding: '11px 14px', fontSize: '0.7rem', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: '#9BA8B5', textAlign: i === 6 ? 'right' : 'left' }}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -194,16 +189,12 @@ export default function Membres() {
                 {search ? `Aucun résultat pour "${search}"` : 'Aucun membre. Ajoutez votre premier membre →'}
               </td></tr>
             ) : visible.map(m => (
-              <tr key={m.id}
-                style={{ borderBottom: '1px solid #F5F7FA', transition: 'background 0.12s', cursor: 'pointer', background: m.is_coach ? 'rgba(123,94,167,0.02)' : 'transparent' }}
-                onMouseOver={e => e.currentTarget.style.background = m.is_coach ? 'rgba(123,94,167,0.06)' : '#F8FAFF'}
-                onMouseOut={e => e.currentTarget.style.background = m.is_coach ? 'rgba(123,94,167,0.02)' : 'transparent'}
-              >
+              <tr key={m.id} style={{ borderBottom: '1px solid #F5F7FA', transition: 'background 0.12s' }}
+                onMouseOver={e => e.currentTarget.style.background = '#F8FAFF'}
+                onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
                 <td style={{ padding: '10px 14px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 34, height: 34, borderRadius: '50%', background: avColor(m), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.82rem', fontWeight: 700, color: '#fff', flexShrink: 0 }}>
-                      {initials(m)}
-                    </div>
+                    <div style={{ width: 34, height: 34, borderRadius: '50%', background: avColor(m), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.82rem', fontWeight: 700, color: '#fff', flexShrink: 0 }}>{initials(m)}</div>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.84rem', fontWeight: 600, color: '#0B1A3E' }}>
                         {m.prenom} {m.nom}
@@ -214,20 +205,14 @@ export default function Membres() {
                   </div>
                 </td>
                 <td style={{ padding: '10px 14px' }}>
+                  <Badge variant={roleBadge(m.role_club)}>{roleLabel(m.role_club)}</Badge>
+                </td>
+                <td style={{ padding: '10px 14px' }}>
                   {m.equipe && <span style={{ display: 'inline-flex', padding: '3px 8px', borderRadius: 7, fontSize: '0.72rem', fontWeight: 500, background: '#F5F7FA', color: '#0B1A3E', border: '1px solid #E2E8F0' }}>{m.equipe}</span>}
                 </td>
-                <td style={{ padding: '10px 14px', fontSize: '0.74rem', color: '#9BA8B5' }}>
-                  {m.telephone || '—'}
-                </td>
+                <td style={{ padding: '10px 14px', fontSize: '0.74rem', color: '#9BA8B5' }}>{m.telephone || '—'}</td>
                 <td style={{ padding: '10px 14px' }}>
                   <Badge variant={BADGE_LICENCE[m.licence_statut] || 'gray'}>{LABEL_LICENCE[m.licence_statut]}</Badge>
-                </td>
-                <td style={{ padding: '10px 14px' }}>
-                  {m.certificat_date ? (
-                    <Badge variant={new Date(m.certificat_date) < new Date() ? 'red' : new Date(m.certificat_date) < new Date(Date.now()+14*864e5) ? 'orange' : 'green'}>
-                      {new Date(m.certificat_date) < new Date() ? '✕ Expiré' : new Date(m.certificat_date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}
-                    </Badge>
-                  ) : <Badge variant="gray">Non renseigné</Badge>}
                 </td>
                 <td style={{ padding: '10px 14px' }}>
                   <Badge variant={BADGE_COTIS[m.cotisation_statut] || 'gray'}>{LABEL_COTIS[m.cotisation_statut]}</Badge>
@@ -235,11 +220,9 @@ export default function Membres() {
                 <td style={{ padding: '10px 14px', textAlign: 'right' }}>
                   <div style={{ display: 'flex', gap: 5, justifyContent: 'flex-end' }}>
                     {m.cotisation_statut === 'en_retard' && (
-                      <button onClick={() => sendRelance(m)} title="Envoyer une relance"
-                        style={{ width: 28, height: 28, borderRadius: 7, border: '1px solid #E2E8F0', background: '#fff', cursor: 'pointer', fontSize: '0.78rem' }}>📧</button>
+                      <button onClick={() => sendRelance(m)} style={{ width: 28, height: 28, borderRadius: 7, border: '1px solid #E2E8F0', background: '#fff', cursor: 'pointer', fontSize: '0.78rem' }}>📧</button>
                     )}
-                    <button onClick={() => openEdit(m)} title="Modifier"
-                      style={{ width: 28, height: 28, borderRadius: 7, border: '1px solid #E2E8F0', background: '#fff', cursor: 'pointer', fontSize: '0.78rem' }}>✏️</button>
+                    <button onClick={() => openEdit(m)} style={{ width: 28, height: 28, borderRadius: 7, border: '1px solid #E2E8F0', background: '#fff', cursor: 'pointer', fontSize: '0.78rem' }}>✏️</button>
                   </div>
                 </td>
               </tr>
@@ -248,27 +231,45 @@ export default function Membres() {
         </table>
       </div>
 
-      <Modal
-        open={modal}
-        onClose={() => setModal(false)}
+      <Modal open={modal} onClose={() => setModal(false)}
         title={editId ? 'Modifier le membre' : 'Ajouter un membre'}
-        subtitle={editId ? `${form.prenom} ${form.nom}` : 'Remplissez les informations.'}
+        subtitle={editId ? `${form.prenom} ${form.nom}` : 'Seuls prénom et nom sont obligatoires.'}
         footer={<>
           <Button variant="ghost" onClick={() => setModal(false)}>Annuler</Button>
           <Button variant="blue" loading={saving} onClick={save}>{editId ? 'Enregistrer' : 'Créer le membre'}</Button>
         </>}
       >
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
-          <Field label="Prénom"><Input value={form.prenom} onChange={set('prenom')} required placeholder="Marie" /></Field>
-          <Field label="Nom"><Input value={form.nom} onChange={set('nom')} required placeholder="Dupont" /></Field>
+          <Field label="Prénom *"><Input value={form.prenom} onChange={set('prenom')} required placeholder="Marie" /></Field>
+          <Field label="Nom *"><Input value={form.nom} onChange={set('nom')} required placeholder="Dupont" /></Field>
         </div>
+
+        <Field label="Rôle dans le club">
+          <div style={{ display: 'flex', gap: 8 }}>
+            {[['joueur','⚽ Joueur'],['benevole','🙋 Bénévole'],['les_deux','⚽🙋 Les deux']].map(([val, label]) => (
+              <div key={val} onClick={() => setForm(f => ({ ...f, role_club: val }))}
+                style={{ flex: 1, padding: '9px 6px', borderRadius: 9, textAlign: 'center', border: '1.5px solid', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, transition: 'all 0.15s',
+                  borderColor: form.role_club === val ? '#1A5FFF' : '#E2E8F0',
+                  background: form.role_club === val ? '#EEF3FF' : '#fff',
+                  color: form.role_club === val ? '#1A5FFF' : '#6B7A8D' }}>
+                {label}
+              </div>
+            ))}
+          </div>
+        </Field>
+
+        {isJoueur && (
+          <Field label="Équipe">
+            <Select value={form.equipe} onChange={set('equipe')}>
+              <option value="">— Aucune équipe —</option>
+              {EQUIPES.map(e => <option key={e}>{e}</option>)}
+            </Select>
+          </Field>
+        )}
+
         <Field label="Email"><Input type="email" value={form.email} onChange={set('email')} placeholder="m.dupont@email.fr" /></Field>
         <Field label="Téléphone"><Input value={form.telephone} onChange={set('telephone')} placeholder="06 12 34 56 78" /></Field>
-        <Field label="Équipe">
-          <Select value={form.equipe} onChange={set('equipe')}>
-            {EQUIPES.map(e => <option key={e}>{e}</option>)}
-          </Select>
-        </Field>
+
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <Field label="Licence">
             <Select value={form.licence_statut} onChange={set('licence_statut')}>
@@ -285,14 +286,14 @@ export default function Membres() {
             </Select>
           </Field>
         </div>
+
         <Field label="Date du certificat médical">
           <Input type="date" value={form.certificat_date} onChange={set('certificat_date')} />
         </Field>
+
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
           <input type="checkbox" id="is_coach" checked={form.is_coach} onChange={set('is_coach')} style={{ width: 16, height: 16, cursor: 'pointer' }} />
-          <label htmlFor="is_coach" style={{ fontSize: '0.85rem', color: '#0B1A3E', cursor: 'pointer', fontWeight: 500 }}>
-            🎽 Ce membre est un coach
-          </label>
+          <label htmlFor="is_coach" style={{ fontSize: '0.85rem', color: '#0B1A3E', cursor: 'pointer', fontWeight: 500 }}>🎽 Ce membre est un coach</label>
         </div>
         {form.is_coach && (
           <Field label="Équipe(s) encadrée(s)" style={{ marginTop: 12 }}>
